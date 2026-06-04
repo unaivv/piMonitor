@@ -1,10 +1,10 @@
+import functools
 import json
 import sqlite3
 import threading
 from datetime import datetime, timedelta
-from pathlib import Path
 
-from flask import Flask, jsonify, render_template
+from flask import Flask, Response, jsonify, render_template, request
 
 from src.collector import get_services
 
@@ -20,6 +20,26 @@ def set_monitor(monitor) -> None:
     _monitor_ref = monitor
 
 
+def _require_auth(f):
+    @functools.wraps(f)
+    def wrapper(*args, **kwargs):
+        if _monitor_ref is None:
+            return f(*args, **kwargs)
+        auth_cfg = _monitor_ref.config.get("auth", {})
+        user = auth_cfg.get("username")
+        password = auth_cfg.get("password")
+        if not user or not password:
+            return f(*args, **kwargs)
+        creds = request.authorization
+        if not creds or creds.username != user or creds.password != password:
+            return Response(
+                "Acceso restringido", 401,
+                {"WWW-Authenticate": 'Basic realm="piMonitor"'},
+            )
+        return f(*args, **kwargs)
+    return wrapper
+
+
 def _db_conn() -> sqlite3.Connection:
     conn = sqlite3.connect("data/metrics.db")
     conn.row_factory = sqlite3.Row
@@ -27,11 +47,13 @@ def _db_conn() -> sqlite3.Connection:
 
 
 @app.route("/")
+@_require_auth
 def index():
     return render_template("index.html")
 
 
 @app.route("/api/status")
+@_require_auth
 def status():
     if _monitor_ref is None:
         return jsonify({"error": "monitor not ready"}), 503
@@ -42,6 +64,7 @@ def status():
 
 
 @app.route("/api/history")
+@_require_auth
 def history():
     hours = 24
     since = (datetime.now() - timedelta(hours=hours)).isoformat()
@@ -65,6 +88,7 @@ def history():
 
 
 @app.route("/api/services")
+@_require_auth
 def services():
     watched = None
     if _monitor_ref is not None:
@@ -73,6 +97,7 @@ def services():
 
 
 @app.route("/api/alerts")
+@_require_auth
 def alerts():
     conn = _db_conn()
     rows = conn.execute(

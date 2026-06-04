@@ -15,6 +15,12 @@ history_days: 7
 # Puerto del dashboard web (Cloudflare Tunnel apunta a este puerto)
 web_port: 5000
 
+# ─── Autenticación web ───────────────────
+# Si están vacíos, el dashboard es público.
+auth:
+  username: "TU_USUARIO"
+  password: "TU_CONTRASEÑA"
+
 # ─── Telegram ────────────────────────────
 telegram:
   # Creá tu bot con @BotFather y pegá el token acá
