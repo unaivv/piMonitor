@@ -12,6 +12,7 @@ Resource monitor for Raspberry Pi with Telegram alerts and a web dashboard acces
 - **Dashboard** — dark web UI with 24 h charts, auto-refresh every 30 s
 - **History** — SQLite persistence with configurable retention (default 7 days)
 - **Public access** — Cloudflare Tunnel, no open ports required
+- **Authentication** — session-based login form (works in Telegram Mini App and all browsers)
 
 ## Requirements
 
@@ -69,6 +70,12 @@ disks:
 #   - nginx
 #   - cloudflared
 #   - pimonitor
+
+# Optional: protect the dashboard with a login form
+# Leave empty to disable authentication
+auth:
+  username: "YOUR_USERNAME"
+  password: "YOUR_PASSWORD"
 ```
 
 ### Getting your Telegram chat ID
@@ -146,7 +153,8 @@ piMonitor/
 │   ├── storage.py        # SQLite
 │   └── web.py            # Flask API + dashboard
 └── templates/
-    └── index.html        # web dashboard
+    ├── index.html        # web dashboard
+    └── login.html        # login form
 ```
 
 ## License
