@@ -1,15 +1,18 @@
 import functools
 import json
+import os
 import sqlite3
 import threading
 from datetime import datetime, timedelta
 
-from flask import Flask, Response, jsonify, render_template, request
+from flask import (Flask, jsonify, redirect, render_template,
+                   request, session, url_for)
 
 from src.collector import get_services
 
 app = Flask(__name__, template_folder="../templates")
 app.jinja_env.auto_reload = True
+app.secret_key = os.urandom(24)
 
 # Shared reference injected by monitor.py at startup
 _monitor_ref = None
@@ -20,24 +23,43 @@ def set_monitor(monitor) -> None:
     _monitor_ref = monitor
 
 
+def _auth_enabled() -> tuple[str, str] | None:
+    if _monitor_ref is None:
+        return None
+    cfg = _monitor_ref.config.get("auth", {})
+    u, p = cfg.get("username", ""), cfg.get("password", "")
+    return (u, p) if u and p else None
+
+
 def _require_auth(f):
     @functools.wraps(f)
     def wrapper(*args, **kwargs):
-        if _monitor_ref is None:
-            return f(*args, **kwargs)
-        auth_cfg = _monitor_ref.config.get("auth", {})
-        user = auth_cfg.get("username")
-        password = auth_cfg.get("password")
-        if not user or not password:
-            return f(*args, **kwargs)
-        creds = request.authorization
-        if not creds or creds.username != user or creds.password != password:
-            return Response(
-                "Acceso restringido", 401,
-                {"WWW-Authenticate": 'Basic realm="piMonitor"'},
-            )
+        creds = _auth_enabled()
+        if creds and not session.get("authenticated"):
+            return redirect(url_for("login", next=request.path))
         return f(*args, **kwargs)
     return wrapper
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    creds = _auth_enabled()
+    if not creds:
+        return redirect(url_for("index"))
+    error = None
+    if request.method == "POST":
+        if (request.form.get("username") == creds[0] and
+                request.form.get("password") == creds[1]):
+            session["authenticated"] = True
+            return redirect(request.args.get("next") or url_for("index"))
+        error = "Usuario o contraseña incorrectos."
+    return render_template("login.html", error=error)
+
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
 
 
 def _db_conn() -> sqlite3.Connection:
