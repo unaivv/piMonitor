@@ -1,0 +1,55 @@
+# ─────────────────────────────────────────
+#  piMonitor — Configuración
+# ─────────────────────────────────────────
+
+# Segundos entre cada medición
+check_interval: 60
+
+# Resumen periódico vía Telegram (0 = desactivado)
+# Ejemplo: 1440 = una vez por día
+status_interval_minutes: 1440
+
+# Cuántos días guardar historial local
+history_days: 7
+
+# Puerto del dashboard web (Cloudflare Tunnel apunta a este puerto)
+web_port: 5000
+
+# ─── Telegram ────────────────────────────
+telegram:
+  # Creá tu bot con @BotFather y pegá el token acá
+  bot_token: "TU_BOT_TOKEN_AQUI"
+  # Tu chat ID (mandá /start al bot y consultá https://api.telegram.org/bot<TOKEN>/getUpdates)
+  chat_id: "TU_CHAT_ID_AQUI"
+
+# ─── Umbrales de alerta ──────────────────
+thresholds:
+  cpu_percent: 80        # % de uso de CPU
+  ram_percent: 85        # % de RAM usada
+  disk_percent: 90       # % de disco ocupado
+  temperature_celsius: 70  # °C (Raspberry Pi)
+
+# No reenviar la misma alerta si ya se mandó en los últimos N minutos
+alert_cooldown_minutes: 30
+
+# Cuántas mediciones consecutivas por encima del umbral para disparar alerta
+# (evita falsos positivos por picos fugaces)
+sustained_checks: 3
+
+# ─── Servicios a monitorear ──────────────
+# Lista de servicios a mostrar en el dashboard.
+# Si está vacío (o comentado), se muestran todos los no-sistema automáticamente.
+# watched_services:
+#   - nginx
+#   - cloudflared
+#   - pimonitor
+#   - postgresql
+#   - docker
+
+# ─── Discos a monitorear ─────────────────
+disks:
+  - path: /
+    name: "Sistema"
+  # Descomentá y ajustá si tenés un disco externo montado
+  # - path: /mnt/hdd
+  #   name: "Disco Externo"

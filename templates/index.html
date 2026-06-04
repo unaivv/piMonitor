@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>piMonitor</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #0f1117;
+      --surface:  #1a1d27;
+      --border:   #2a2d3a;
+      --accent:   #6c8cff;
+      --green:    #3ecf8e;
+      --yellow:   #f5a623;
+      --red:      #ff5c5c;
+      --text:     #e2e5f0;
+      --muted:    #6b7280;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 1.5rem;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1.5rem;
+    }
+
+    header h1 { font-size: 1.25rem; font-weight: 600; letter-spacing: 0.5px; }
+    header h1 span { color: var(--accent); }
+
+    #last-update { font-size: 0.75rem; color: var(--muted); }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.25rem;
+    }
+
+    .card-label {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--muted);
+      margin-bottom: 0.5rem;
+    }
+
+    .card-value { font-size: 2rem; font-weight: 700; line-height: 1; }
+    .card-sub   { font-size: 0.75rem; color: var(--muted); margin-top: 0.4rem; }
+
+    .bar-wrap {
+      background: var(--border);
+      border-radius: 99px;
+      height: 6px;
+      margin-top: 0.75rem;
+      overflow: hidden;
+    }
+
+    .bar { height: 100%; border-radius: 99px; transition: width 0.6s ease; }
+
+    .section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.25rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1rem;
+    }
+
+    .section-header h2 {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--muted);
+    }
+
+    .svc-summary {
+      display: flex;
+      gap: 0.5rem;
+      font-size: 0.75rem;
+      flex-wrap: wrap;
+    }
+
+    .svc-filter {
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.3rem;
+      padding: 0.2rem 0.55rem;
+      border-radius: 99px;
+      border: 1px solid transparent;
+      transition: border-color 0.15s;
+      user-select: none;
+    }
+
+    .svc-filter:hover       { border-color: var(--border); }
+    .svc-filter.active-filter { border-color: var(--accent); }
+    .svc-filter.clear-btn  { color: var(--muted); font-size: 0.7rem; }
+
+    .charts-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    @media (max-width: 640px) {
+      .charts-row { grid-template-columns: 1fr; }
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    table {
+      width: 100%;
+      min-width: 480px;
+      border-collapse: collapse;
+      font-size: 0.8rem;
+    }
+
+    th {
+      text-align: left;
+      color: var(--muted);
+      font-weight: 500;
+      padding: 0.4rem 0.5rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    td { padding: 0.5rem 0.5rem; border-bottom: 1px solid var(--border); }
+    tr:last-child td { border-bottom: none; }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      padding: 0.2rem 0.55rem;
+      border-radius: 99px;
+      font-size: 0.7rem;
+      font-weight: 600;
+    }
+
+    .pill-green  { background: color-mix(in srgb, var(--green)  15%, transparent); color: var(--green); }
+    .pill-yellow { background: color-mix(in srgb, var(--yellow) 15%, transparent); color: var(--yellow); }
+    .pill-red    { background: color-mix(in srgb, var(--red)    15%, transparent); color: var(--red); }
+    .pill-muted  { background: color-mix(in srgb, var(--muted)  15%, transparent); color: var(--muted); }
+
+    .dot {
+      display: inline-block;
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      margin-right: 0.4rem;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.4; }
+    }
+
+    .no-data { color: var(--muted); font-size: 0.85rem; }
+
+    .svc-name { font-weight: 500; font-family: monospace; font-size: 0.82rem; }
+    .svc-desc { color: var(--muted); font-size: 0.75rem; }
+
+    tr.svc-failed { background: color-mix(in srgb, var(--red) 5%, transparent); }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1><span>pi</span>Monitor</h1>
+  <span id="last-update"><span class="dot"></span>Cargando…</span>
+</header>
+
+<!-- Métricas actuales -->
+<div class="grid" id="cards"></div>
+
+<!-- Gráficos -->
+<div class="charts-row">
+  <div class="section">
+    <div class="section-header"><h2>CPU — últimas 24h</h2></div>
+    <canvas id="chart-cpu" height="120"></canvas>
+  </div>
+  <div class="section">
+    <div class="section-header"><h2>RAM — últimas 24h</h2></div>
+    <canvas id="chart-ram" height="120"></canvas>
+  </div>
+</div>
+
+<!-- Servicios -->
+<div class="section">
+  <div class="section-header">
+    <h2>Servicios</h2>
+    <div class="svc-summary" id="svc-summary"></div>
+  </div>
+  <div id="services-body"></div>
+</div>
+
+<!-- Historial de alertas -->
+<div class="section">
+  <div class="section-header"><h2>Historial de alertas</h2></div>
+  <div id="alerts-body"></div>
+</div>
+
+<script>
+  const fmt   = (v, u = '%') => v != null ? `${v.toFixed(1)}${u}` : '—';
+  const color = (v) => v >= 90 ? 'var(--red)' : v >= 70 ? 'var(--yellow)' : 'var(--green)';
+
+  // ── Metric cards ──────────────────────────────────────────────────────────
+  function card(label, value, sub, pct) {
+    const col = color(pct ?? value);
+    return `
+      <div class="card">
+        <div class="card-label">${label}</div>
+        <div class="card-value" style="color:${col}">${value}</div>
+        ${sub ? `<div class="card-sub">${sub}</div>` : ''}
+        <div class="bar-wrap"><div class="bar" style="width:${Math.min(pct??0,100)}%;background:${col}"></div></div>
+      </div>`;
+  }
+
+  function renderCards(d) {
+    const ram = d.ram;
+    let html = '';
+    html += card('CPU', fmt(d.cpu_percent), '', d.cpu_percent);
+    html += card('RAM', fmt(ram.percent), `${ram.used_gb} / ${ram.total_gb} GB`, ram.percent);
+    if (d.temperature != null)
+      html += card('Temperatura', fmt(d.temperature, '°C'), '', (d.temperature / 85) * 100);
+    for (const [name, disk] of Object.entries(d.disks || {})) {
+      if (disk.error) {
+        html += card(name, '⚠️', disk.error, 0);
+      } else {
+        html += card(`Disco — ${name}`, fmt(disk.percent), `${disk.free_gb} GB libres`, disk.percent);
+      }
+    }
+    document.getElementById('cards').innerHTML = html;
+  }
+
+  // ── Charts ────────────────────────────────────────────────────────────────
+  const chartOpts = (label, clr) => ({
+    type: 'line',
+    data: { labels: [], datasets: [{ label, data: [], borderColor: clr, backgroundColor: clr + '22', borderWidth: 2, pointRadius: 0, fill: true, tension: 0.3 }] },
+    options: {
+      animation: false, responsive: true,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: '#6b7280', maxTicksLimit: 6, font: { size: 10 } }, grid: { color: '#2a2d3a' } },
+        y: { min: 0, max: 100, ticks: { color: '#6b7280', font: { size: 10 }, callback: v => v + '%' }, grid: { color: '#2a2d3a' } }
+      }
+    }
+  });
+
+  const chartCpu = new Chart(document.getElementById('chart-cpu'), chartOpts('CPU %', '#6c8cff'));
+  const chartRam = new Chart(document.getElementById('chart-ram'), chartOpts('RAM %', '#3ecf8e'));
+
+  function renderHistory(rows) {
+    const step    = Math.max(1, Math.floor(rows.length / 60));
+    const sampled = rows.filter((_, i) => i % step === 0);
+    const labels  = sampled.map(r => {
+      const d = new Date(r.ts);
+      return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+    });
+    chartCpu.data.labels = labels;
+    chartCpu.data.datasets[0].data = sampled.map(r => r.cpu);
+    chartCpu.update();
+    chartRam.data.labels = labels;
+    chartRam.data.datasets[0].data = sampled.map(r => r.ram);
+    chartRam.update();
+  }
+
+  // ── Services ──────────────────────────────────────────────────────────────
+  let _allServices = [];
+  let _svcFilter   = null;   // 'running' | 'stopped' | 'failed' | null
+
+  function svcCategory(r) {
+    if (r.active === 'failed' || r.sub === 'failed') return 'failed';
+    if (r.active === 'active' && r.sub === 'running') return 'running';
+    return 'stopped';
+  }
+
+  function svcPill(cat) {
+    if (cat === 'failed')  return `<span class="pill pill-red">● failed</span>`;
+    if (cat === 'running') return `<span class="pill pill-green">● running</span>`;
+    return `<span class="pill pill-muted">● stopped</span>`;
+  }
+
+  function applyFilter() {
+    const rows = _svcFilter ? _allServices.filter(r => svcCategory(r) === _svcFilter) : _allServices;
+    const body = document.getElementById('services-body');
+    if (!rows.length) {
+      body.innerHTML = '<p class="no-data">Sin servicios para este filtro.</p>';
+      return;
+    }
+    body.innerHTML = `
+      <div class="table-wrap"><table>
+        <thead><tr><th>Servicio</th><th>Estado</th><th>Descripción</th></tr></thead>
+        <tbody>${rows.map(r => {
+          const cat = svcCategory(r);
+          return `<tr class="${cat === 'failed' ? 'svc-failed' : ''}">
+            <td class="svc-name">${r.name}</td>
+            <td>${svcPill(cat)}</td>
+            <td class="svc-desc">${r.description}</td>
+          </tr>`;
+        }).join('')}
+        </tbody>
+      </table></div>`;
+  }
+
+  function renderServices(rows) {
+    _allServices = rows;
+    const counts = { running: 0, stopped: 0, failed: 0 };
+    rows.forEach(r => counts[svcCategory(r)]++);
+
+    const mkFilter = (key, label, cls) => {
+      const isActive = _svcFilter === key;
+      return `<span class="svc-filter ${cls}${isActive ? ' active-filter' : ''}" data-filter="${key}">
+        ${label} ${counts[key]}
+      </span>`;
+    };
+
+    document.getElementById('svc-summary').innerHTML =
+      mkFilter('running', '● activos',  'pill-green') +
+      mkFilter('stopped', '● parados',  'pill-muted') +
+      (counts.failed ? mkFilter('failed', '● fallidos', 'pill-red') : '') +
+      (_svcFilter ? `<span class="svc-filter clear-btn" data-filter="clear">✕ limpiar</span>` : '');
+
+    document.querySelectorAll('.svc-filter').forEach(el => {
+      el.addEventListener('click', () => {
+        _svcFilter = el.dataset.filter === 'clear' ? null : el.dataset.filter;
+        renderServices(_allServices);
+      });
+    });
+
+    applyFilter();
+  }
+
+  // ── Alerts ────────────────────────────────────────────────────────────────
+  function renderAlerts(rows) {
+    const el = document.getElementById('alerts-body');
+    if (!rows.length) { el.innerHTML = '<p class="no-data">Sin alertas registradas.</p>'; return; }
+    el.innerHTML = `<div class="table-wrap"><table>
+      <thead><tr><th>Fecha</th><th>Métrica</th><th>Valor</th><th>Umbral</th></tr></thead>
+      <tbody>${rows.map(r => `
+        <tr>
+          <td>${new Date(r.timestamp).toLocaleString('es-AR')}</td>
+          <td><span class="pill pill-red">${r.metric}</span></td>
+          <td>${r.value?.toFixed(1)}</td>
+          <td>${r.threshold}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table></div>`;
+  }
+
+  // ── Refresh loops ─────────────────────────────────────────────────────────
+  async function refreshMetrics() {
+    try {
+      const [status, history, alerts] = await Promise.all([
+        fetch('/api/status').then(r => r.json()),
+        fetch('/api/history').then(r => r.json()),
+        fetch('/api/alerts').then(r => r.json()),
+      ]);
+      renderCards(status);
+      renderHistory(history);
+      renderAlerts(alerts);
+      document.getElementById('last-update').innerHTML =
+        `<span class="dot"></span>Actualizado ${new Date().toLocaleTimeString('es-AR')}`;
+    } catch { document.getElementById('last-update').textContent = 'Error al obtener datos'; }
+  }
+
+  async function refreshServices() {
+    try {
+      const data = await fetch('/api/services').then(r => r.json());
+      renderServices(data);
+    } catch {}
+  }
+
+  refreshMetrics();
+  refreshServices();
+  setInterval(refreshMetrics, 30_000);
+  setInterval(refreshServices, 15_000);   // servicios cada 15s
+</script>
+</body>
+</html>

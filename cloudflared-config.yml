@@ -1,0 +1,11 @@
+# Cloudflare Tunnel — piMonitor
+# Copiá este archivo a ~/.cloudflared/config.yml en tu Raspberry Pi
+# y reemplazá TUNNEL_ID con el ID que te da `cloudflared tunnel create`
+
+tunnel: TUNNEL_ID
+credentials-file: /home/pi/.cloudflared/TUNNEL_ID.json
+
+ingress:
+  - hostname: monitor.unaividal.com
+    service: http://localhost:5000
+  - service: http_status:404
