@@ -1,9 +1,12 @@
 import functools
+import hashlib
+import hmac
 import json
-import os
 import sqlite3
 import threading
+import time
 from datetime import datetime, timedelta
+from urllib.parse import parse_qsl
 
 from flask import (Flask, jsonify, redirect, render_template,
                    request, session, url_for)
@@ -12,15 +15,20 @@ from src.collector import get_services
 
 app = Flask(__name__, template_folder="../templates")
 app.jinja_env.auto_reload = True
-app.secret_key = os.urandom(24)
 
-# Shared reference injected by monitor.py at startup
 _monitor_ref = None
 
 
 def set_monitor(monitor) -> None:
     global _monitor_ref
     _monitor_ref = monitor
+    # Derive a stable secret key from credentials so sessions survive restarts
+    seed = (
+        monitor.config.get("auth", {}).get("password", "pimonitor") +
+        monitor.config.get("telegram", {}).get("bot_token", "")
+    )
+    app.secret_key = hashlib.sha256(seed.encode()).digest()
+    app.permanent_session_lifetime = timedelta(days=30)
 
 
 def _auth_enabled() -> tuple[str, str] | None:
@@ -31,14 +39,43 @@ def _auth_enabled() -> tuple[str, str] | None:
     return (u, p) if u and p else None
 
 
+def _verify_telegram(init_data: str) -> bool:
+    """Verify Telegram WebApp initData HMAC signature."""
+    try:
+        bot_token = _monitor_ref.config.get("telegram", {}).get("bot_token", "")
+        if not bot_token or not init_data:
+            return False
+        parsed = dict(parse_qsl(init_data, keep_blank_values=True))
+        received_hash = parsed.pop("hash", "")
+        check_string = "\n".join(f"{k}={v}" for k, v in sorted(parsed.items()))
+        secret_key = hmac.new(b"WebAppData", bot_token.encode(), hashlib.sha256).digest()
+        expected_hash = hmac.new(secret_key, check_string.encode(), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(expected_hash, received_hash):
+            return False
+        # Reject tokens older than 24 hours
+        auth_date = int(parsed.get("auth_date", 0))
+        return (time.time() - auth_date) < 86400
+    except Exception:
+        return False
+
+
 def _require_auth(f):
     @functools.wraps(f)
     def wrapper(*args, **kwargs):
-        creds = _auth_enabled()
-        if creds and not session.get("authenticated"):
+        if _auth_enabled() and not session.get("authenticated"):
             return redirect(url_for("login", next=request.path))
         return f(*args, **kwargs)
     return wrapper
+
+
+@app.route("/api/telegram-auth", methods=["POST"])
+def telegram_auth():
+    init_data = (request.get_json() or {}).get("init_data", "")
+    if _verify_telegram(init_data):
+        session.permanent = True
+        session["authenticated"] = True
+        return jsonify({"ok": True})
+    return jsonify({"ok": False}), 403
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -50,6 +87,7 @@ def login():
     if request.method == "POST":
         if (request.form.get("username") == creds[0] and
                 request.form.get("password") == creds[1]):
+            session.permanent = True
             session["authenticated"] = True
             return redirect(request.args.get("next") or url_for("index"))
         error = "Usuario o contraseña incorrectos."
@@ -88,8 +126,7 @@ def status():
 @app.route("/api/history")
 @_require_auth
 def history():
-    hours = 24
-    since = (datetime.now() - timedelta(hours=hours)).isoformat()
+    since = (datetime.now() - timedelta(hours=24)).isoformat()
     conn = _db_conn()
     rows = conn.execute(
         "SELECT timestamp, cpu_percent, ram_percent, temperature, disks_json "
@@ -112,9 +149,7 @@ def history():
 @app.route("/api/services")
 @_require_auth
 def services():
-    watched = None
-    if _monitor_ref is not None:
-        watched = _monitor_ref.config.get("watched_services") or None
+    watched = _monitor_ref.config.get("watched_services") or None if _monitor_ref else None
     return jsonify(get_services(watched))
 
 
