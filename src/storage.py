@@ -1,6 +1,6 @@
 import json
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 
@@ -28,7 +28,39 @@ class MetricsStorage:
                 threshold REAL
             );
             CREATE INDEX IF NOT EXISTS idx_metrics_ts ON metrics(timestamp);
+            CREATE TABLE IF NOT EXISTS mute (
+                id          INTEGER PRIMARY KEY CHECK (id = 1),
+                muted_until TEXT
+            );
         """)
+        self.conn.commit()
+
+    def set_mute(self, minutes: int) -> str:
+        """Mute alerts for `minutes` from now. Returns the muted-until ISO timestamp."""
+        muted_until = (datetime.now() + timedelta(minutes=minutes)).isoformat()
+        self.conn.execute(
+            "INSERT INTO mute (id, muted_until) VALUES (1, ?) "
+            "ON CONFLICT(id) DO UPDATE SET muted_until = excluded.muted_until",
+            (muted_until,),
+        )
+        self.conn.commit()
+        return muted_until
+
+    def get_mute_until(self) -> datetime | None:
+        """Current muted-until datetime, or None if not muted / mute has expired."""
+        row = self.conn.execute("SELECT muted_until FROM mute WHERE id = 1").fetchone()
+        if row is None or row[0] is None:
+            return None
+        muted_until = datetime.fromisoformat(row[0])
+        if muted_until <= datetime.now():
+            return None
+        return muted_until
+
+    def clear_mute(self) -> None:
+        self.conn.execute(
+            "INSERT INTO mute (id, muted_until) VALUES (1, NULL) "
+            "ON CONFLICT(id) DO UPDATE SET muted_until = NULL"
+        )
         self.conn.commit()
 
     def save_metrics(self, metrics: dict) -> None:

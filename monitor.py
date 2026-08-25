@@ -52,6 +52,8 @@ class Monitor:
     # ─── alert helpers ───────────────────────────────────────────────────────
 
     def _can_alert(self, key: str) -> bool:
+        if self.storage.get_mute_until() is not None:
+            return False
         last = self._last_alert.get(key)
         return last is None or (datetime.now() - last) > self.cooldown
 

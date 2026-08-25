@@ -164,6 +164,43 @@ def alerts():
     return jsonify([dict(r) for r in rows])
 
 
+@app.route("/api/mute", methods=["GET"])
+@_require_auth
+def get_mute():
+    if _monitor_ref is None:
+        return jsonify({"error": "monitor not ready"}), 503
+    muted_until = _monitor_ref.storage.get_mute_until()
+    return jsonify({
+        "muted": muted_until is not None,
+        "until": muted_until.isoformat() if muted_until else None,
+    })
+
+
+@app.route("/api/mute", methods=["POST"])
+@_require_auth
+def post_mute():
+    if _monitor_ref is None:
+        return jsonify({"error": "monitor not ready"}), 503
+    body = request.get_json(silent=True) or {}
+    try:
+        minutes = int(body.get("minutes"))
+    except (TypeError, ValueError):
+        return jsonify({"error": "minutes must be an integer"}), 400
+    if minutes <= 0:
+        return jsonify({"error": "minutes must be positive"}), 400
+    muted_until = _monitor_ref.storage.set_mute(minutes)
+    return jsonify({"muted": True, "until": muted_until})
+
+
+@app.route("/api/mute/clear", methods=["POST"])
+@_require_auth
+def clear_mute():
+    if _monitor_ref is None:
+        return jsonify({"error": "monitor not ready"}), 503
+    _monitor_ref.storage.clear_mute()
+    return jsonify({"muted": False, "until": None})
+
+
 def start(host: str = "0.0.0.0", port: int = 5000) -> None:
     thread = threading.Thread(
         target=lambda: app.run(host=host, port=port, debug=False, use_reloader=False),
